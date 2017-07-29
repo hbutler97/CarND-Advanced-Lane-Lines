@@ -28,7 +28,7 @@ def compare_images(image1, image2):
     ax1.imshow(image1)
     ax1.set_title('Original Image', fontsize=50)
     ax2.imshow(image2)
-    ax2.set_title('Undistorted Image', fontsize=50)
+    ax2.set_title('Processed Image', fontsize=50)
     plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
     plt.show()
 def calibrate_camera(nx, ny, images):
@@ -67,3 +67,7 @@ ret, mtx, dist, rvecs, tvecs = calibrate_camera(9, 6, calibration_images)
 for image in calibration_images:
     compare_images(bgr_to_rgb(image), cv2.undistort(bgr_to_rgb(image), mtx, dist, None, mtx))
 
+
+'''
+1. there were three images that would not work with the findChessboardCorners function in calibrate camera.  These images looked valuable as they had some fish eye
+'''
