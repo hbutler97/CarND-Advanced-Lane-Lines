@@ -126,8 +126,6 @@ def mag_thresh(img, sobel_kernel=3, mag_thresh=(0, 255)):
     return binary_output
 
 def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
-    
-
     # Apply the following steps to img
     # 1) Convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
@@ -139,14 +137,10 @@ def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
     abs_sobely = np.absolute(sobely)
     # 4) Use np.arctan2(abs_sobely, abs_sobelx) to calculate the direction of the gradient
     direction = np.arctan2(abs_sobely, abs_sobelx)
-    
-    
+    # 5) Create a binary mask where direction thresholds are met
     binary_output =  np.zeros_like(direction)
     binary_output[(direction >= thresh[0]) & (direction <= thresh[1])] = 1
-    
-    # 5) Create a binary mask where direction thresholds are met
     # 6) Return this mask as your binary_output image
-    
     return binary_output
 
 def color_rgb_threshold(image, channel='r', thresh=(0,255)):
@@ -189,7 +183,6 @@ def trap_area(deminsions):
     bt2 = np.float32(deminsions[3][0])
     bb1 = np.float32(deminsions[1][0])
     bb2 = np.float32(deminsions[2][0])
-
     h1 = np.float32(deminsions[0][1])
     h2 = np.float32(deminsions[1][1])
     baset = abs(bt1-bt2)
@@ -199,78 +192,76 @@ def trap_area(deminsions):
 
 def rec_deminsions(rec_deminsions, trap_area):
     new_demin = np.copy(rec_deminsions)
-    print(new_demin)
     new_demin[0][0] = rec_deminsions[1][0]
     new_demin[3][0] = rec_deminsions[2][0]
-
-
     sq_width = abs(rec_deminsions[1][0] - rec_deminsions[2][0])
-
     sq_height = trap_area/sq_width
     new_demin[0][1] = int(new_demin[0][1] - sq_height)
     new_demin[3][1] = int(new_demin[3][1] - sq_height)
-    print(sq_height)
-    print(new_demin)
     return new_demin
-
 
 def prospective_transform(image, src, dst, area):
    
-   # plt.plot(260, 680, '.')
-   # plt.plot(525, 500, '.')
-   # plt.plot(1050, 680, '.')
-   # plt.plot(765, 500, '.')
-   # plt.plot(565, 470, '.')
-   # plt.plot(720, 470, '.')
-   # plt.show()
-
     img_size = (image.shape[1], image.shape[0])
- 
-    #src = np.float32([[763, 500],
-    #                  [893, 586],
-    #                  [400, 586],
-    #                  [525, 500]])
+    #plt.imshow(image)
+    #plt.plot(src[0][0], src[0][1], '.')
+    #plt.plot(src[1][0], src[1][1], '.')
+    #plt.plot(src[2][0], src[2][1], '.')
+    #plt.plot(src[3][0], src[3][1], '.')
 
-   # src = np.float32([[763, 500],
-   #                   [845, 550],
-   #                   [450, 550],
-   #                   [525, 500]])
-
-   # src = np.float32([[763, 500],
-   #                   [791, 520],
-   #                   [495, 520],
-   #                   [525, 500]])
-   
-   # area = trap_area(src)
-    #dst = rec_deminsions(src, area)
-    plt.imshow(image)
-    plt.plot(src[0][0], src[0][1], '.')
-    plt.plot(src[1][0], src[1][1], '.')
-    plt.plot(src[2][0], src[2][1], '.')
-    plt.plot(src[3][0], src[3][1], '.')
-
-    plt.plot(dst[0][0], dst[0][1], 'x')
-    plt.plot(dst[1][0], dst[1][1], 'x')
-    plt.plot(dst[2][0], dst[2][1], 'x')
-    plt.plot(dst[3][0], dst[3][1], 'x')
-    plt.show()
+    #plt.plot(dst[0][0], dst[0][1], 'x')
+    #plt.plot(dst[1][0], dst[1][1], 'x')
+    #plt.plot(dst[2][0], dst[2][1], 'x')
+    #plt.plot(dst[3][0], dst[3][1], 'x')
+    #plt.show()
     
     M = cv2.getPerspectiveTransform(src, dst)
     warped = cv2.warpPerspective(image, M, img_size, flags=cv2.INTER_LINEAR)
     return warped
-#Main
-src = np.float32([[716, 470],
-                   [1009, 660],
-                   [288, 660],
-                   [567, 470]])
 
+def pipeline(image, mtx, dist, src, dst, area):
+    new_image = cv2.undistort(image, mtx, dist, None, mtx)
+    new_image = prospective_transform(new_image, src, dst, area)
+   
+   
+    xsobel = abs_sobel_thresh(new_image,'x', (20, 100))
+
+    ysobel = abs_sobel_thresh(new_image,'y', (20, 100))
+
+    magthresh =  mag_thresh(new_image,3, (30, 100))
+   
+    dirthresh = dir_threshold(image, sobel_kernel=15, thresh=(0.7, 1.3))
+    
+    combined = np.zeros_like(dirthresh)
+    combined[((xsobel == 1) & (ysobel == 1)) | ((magthresh == 1) & (dirthresh == 1))] = 1
+    #combined[((xsobel == 1)) | ((magthresh == 1) & (dirthresh == 1))] = 1
+
+   
+    r =  color_rgb_threshold(new_image, channel='r', thresh=(200,255))
+    s =  color_hls_threshold(new_image, channel='s', thresh=(90,200))
+    
+    color_combined =np.zeros_like(r)
+    color_combined[(r == 1) & (s == 1)] = 1
+    #color_combined[(s == 1)] = 1
+    combined_binary = np.zeros_like(color_combined)
+    combined_binary[(color_combined == 1) | (combined == 1)] = 1
+    
+    color_binary = np.dstack(( np.zeros_like(combined), combined, color_combined))
+    compare_images(color_binary, combined, cmap='gray')
+    #compare_dot_images(combined_binary, image, src, dst, cmap='gray')
+
+#    compare_dot_images(image, new_image, src, dst)
+#Main
+
+src = np.float32([[716, 470],
+                  [1009, 660],
+                  [288, 660],
+                  [567, 470]])
 area = trap_area(src)
 dst = rec_deminsions(src, area)
+
 #1. Calibrate Camera
 ret, mtx, dist, rvecs, tvecs = calibrate_camera(9, 6)
-
-
-#test code
 
 images = []
 image_files = glob.glob('./test_images/*.jpg')
@@ -279,10 +270,15 @@ for image_file in image_files:
     images.append(bgr_to_rgb(cv2.imread(image_file)))
 
 for image in images:
-    new_image = cv2.undistort(image, mtx, dist, None, mtx)
-    p = prospective_transform(new_image, src, dst, area)
-    compare_dot_images(new_image, p, src, dst)
+    pipeline(image, mtx, dist, src,dst, area)
+
 exit()
+#test code
+
+
+
+    
+
 for image in images:
 
     xsobel = abs_sobel_thresh(new_image,'x', (20, 100))
