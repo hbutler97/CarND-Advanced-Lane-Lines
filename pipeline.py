@@ -22,6 +22,35 @@ def bgr_to_rgb(image):
     b,g,r = cv2.split(image)
     return cv2.merge([r,g,b])
 
+def compare_dot_images(image1, image2, src, dst, cmap=None):
+    f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
+    f.tight_layout()
+    ax1.imshow(image1, cmap=cmap)
+    ax1.plot(src[0][0], src[0][1], '.')
+    ax1.plot(src[1][0], src[1][1], '.')
+    ax1.plot(src[2][0], src[2][1], '.')
+    ax1.plot(src[3][0], src[3][1], '.')
+
+    ax1.plot(dst[0][0], dst[0][1], 'x')
+    ax1.plot(dst[1][0], dst[1][1], 'x')
+    ax1.plot(dst[2][0], dst[2][1], 'x')
+    ax1.plot(dst[3][0], dst[3][1], 'x')
+    ax1.set_title('Original Image', fontsize=50)
+    ax2.imshow(image2, cmap=cmap)
+    ax2.plot(src[0][0], src[0][1], '.')
+    ax2.plot(src[1][0], src[1][1], '.')
+    ax2.plot(src[2][0], src[2][1], '.')
+    ax2.plot(src[3][0], src[3][1], '.')
+
+    ax2.plot(dst[0][0], dst[0][1], 'x')
+    ax2.plot(dst[1][0], dst[1][1], 'x')
+    ax2.plot(dst[2][0], dst[2][1], 'x')
+    ax2.plot(dst[3][0], dst[3][1], 'x')
+
+    ax2.set_title('Processed Image', fontsize=50)
+    plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
+    plt.show()
+    
 def compare_images(image1, image2, cmap=None):
     f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
     f.tight_layout()
@@ -155,7 +184,88 @@ def color_hls_threshold(image, channel='h', thresh=(0,255)):
     binary[(convert_channel > thresh[0]) & (convert_channel <= thresh[1])] = 1
     return binary
 
+def trap_area(deminsions):
+    bt1 = np.float32(deminsions[0][0])
+    bt2 = np.float32(deminsions[3][0])
+    bb1 = np.float32(deminsions[1][0])
+    bb2 = np.float32(deminsions[2][0])
+
+    h1 = np.float32(deminsions[0][1])
+    h2 = np.float32(deminsions[1][1])
+    baset = abs(bt1-bt2)
+    baseb = abs(bb1-bb2)
+    height = abs(h1-h2)
+    return ((baset + baseb)/2.0)*height
+
+def rec_deminsions(rec_deminsions, trap_area):
+    new_demin = np.copy(rec_deminsions)
+    print(new_demin)
+    new_demin[0][0] = rec_deminsions[1][0]
+    new_demin[3][0] = rec_deminsions[2][0]
+
+
+    sq_width = abs(rec_deminsions[1][0] - rec_deminsions[2][0])
+
+    sq_height = trap_area/sq_width
+    new_demin[0][1] = int(new_demin[0][1] - sq_height)
+    new_demin[3][1] = int(new_demin[3][1] - sq_height)
+    print(sq_height)
+    print(new_demin)
+    return new_demin
+
+
+def prospective_transform(image, src, dst, area):
+   
+   # plt.plot(260, 680, '.')
+   # plt.plot(525, 500, '.')
+   # plt.plot(1050, 680, '.')
+   # plt.plot(765, 500, '.')
+   # plt.plot(565, 470, '.')
+   # plt.plot(720, 470, '.')
+   # plt.show()
+
+    img_size = (image.shape[1], image.shape[0])
+ 
+    #src = np.float32([[763, 500],
+    #                  [893, 586],
+    #                  [400, 586],
+    #                  [525, 500]])
+
+   # src = np.float32([[763, 500],
+   #                   [845, 550],
+   #                   [450, 550],
+   #                   [525, 500]])
+
+   # src = np.float32([[763, 500],
+   #                   [791, 520],
+   #                   [495, 520],
+   #                   [525, 500]])
+   
+   # area = trap_area(src)
+    #dst = rec_deminsions(src, area)
+    plt.imshow(image)
+    plt.plot(src[0][0], src[0][1], '.')
+    plt.plot(src[1][0], src[1][1], '.')
+    plt.plot(src[2][0], src[2][1], '.')
+    plt.plot(src[3][0], src[3][1], '.')
+
+    plt.plot(dst[0][0], dst[0][1], 'x')
+    plt.plot(dst[1][0], dst[1][1], 'x')
+    plt.plot(dst[2][0], dst[2][1], 'x')
+    plt.plot(dst[3][0], dst[3][1], 'x')
+    plt.show()
+    
+    M = cv2.getPerspectiveTransform(src, dst)
+    warped = cv2.warpPerspective(image, M, img_size, flags=cv2.INTER_LINEAR)
+    return warped
 #Main
+src = np.float32([[716, 470],
+                   [1009, 660],
+                   [288, 660],
+                   [567, 470]])
+
+area = trap_area(src)
+dst = rec_deminsions(src, area)
 #1. Calibrate Camera
 ret, mtx, dist, rvecs, tvecs = calibrate_camera(9, 6)
 
@@ -167,9 +277,14 @@ image_files = glob.glob('./test_images/*.jpg')
 
 for image_file in image_files:
     images.append(bgr_to_rgb(cv2.imread(image_file)))
-        
+
 for image in images:
     new_image = cv2.undistort(image, mtx, dist, None, mtx)
+    p = prospective_transform(new_image, src, dst, area)
+    compare_dot_images(new_image, p, src, dst)
+exit()
+for image in images:
+
     xsobel = abs_sobel_thresh(new_image,'x', (20, 100))
     ysobel = abs_sobel_thresh(new_image,'y', (20, 100))
     magthresh =  mag_thresh(new_image,3, (30, 100))
